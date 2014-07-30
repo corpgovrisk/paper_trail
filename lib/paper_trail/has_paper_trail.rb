@@ -257,15 +257,38 @@ module PaperTrail
         if paper_trail_switched_on?
           data = {
             :event     => paper_trail_event || 'create',
-            :whodunnit => PaperTrail.whodunnit
+            :whodunnit => PaperTrail.whodunnit,
+            :h_created_at => Time.zone.now
           }
 
           if changed_notably? and self.class.paper_trail_version_class.column_names.include?('object_changes')
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? changes_for_paper_trail :
               PaperTrail.serializer.dump(changes_for_paper_trail)
           end
-          send(self.class.versions_association_name).create! merge_metadata(data)
+          version = send(self.class.versions_association_name).new merge_metadata(data)
+          version.assign_attributes(self.attributes)
+          ActiveRecord::Base.transaction do
+            if version.save
+              if self.respond_to? :parent_node
+                generate_history_activity(self.parent_node, self, self.created_at, 'create', changes_for_paper_trail)
+              end
+            else
+              raise "Save history fails for creating record #{self.inspect}"
+            end
+          end
         end
+      end
+
+      def generate_history_activity notified_target, source, occurred_at, event, source_changes
+        activity = {
+          :source_id => source.id,
+          :source_type => source.class.to_s,
+          :source_occurred_at => occurred_at,
+          :modified_by_id => PaperTrail.whodunnit,
+          :event => event,
+          :source_changes => source_changes
+        }
+        notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
       end
 
       def record_update
@@ -274,14 +297,29 @@ module PaperTrail
           data = {
             :event     => paper_trail_event || 'update',
             :object    => self.class.paper_trail_version_class.object_col_is_json? ? object_attrs : PaperTrail.serializer.dump(object_attrs),
-            :whodunnit => PaperTrail.whodunnit
+            :whodunnit => PaperTrail.whodunnit,
+            :h_created_at => Time.zone.now
           }
 
           if self.class.paper_trail_version_class.column_names.include?('object_changes')
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? changes_for_paper_trail :
               PaperTrail.serializer.dump(changes_for_paper_trail)
           end
-          send(self.class.versions_association_name).build merge_metadata(data)
+          version = send(self.class.versions_association_name).new merge_metadata(data)
+          version.assign_attributes(self.attributes)
+          ActiveRecord::Base.transaction do
+            if version.save
+              if self.respond_to? :parent_node
+                generate_history_activity(self.parent_node, self, self.updated_at, 'update', changes_for_paper_trail)
+              elsif self.respond_to? :parent_nodes
+                self.parent_nodes.find_each do |parent_node|
+                  generate_history_activity(parent_node, self, self.updated_at, 'update', changes_for_paper_trail)
+                end
+              end
+            else
+              raise "Save history fails for updating record #{self.inspect}"
+            end
+          end
         end
       end
 
@@ -309,9 +347,24 @@ module PaperTrail
             :item_type => self.class.base_class.name,
             :event     => paper_trail_event || 'destroy',
             :object    => self.class.paper_trail_version_class.object_col_is_json? ? object_attrs : PaperTrail.serializer.dump(object_attrs),
-            :whodunnit => PaperTrail.whodunnit
+            :whodunnit => PaperTrail.whodunnit,
+            :h_created_at => Time.zone.now
           }
-          send("#{self.class.version_association_name}=", self.class.paper_trail_version_class.create(merge_metadata(data)))
+          version = send(self.class.versions_association_name).new merge_metadata(data)
+          version.assign_attributes(object_attrs)
+          ActiveRecord::Base.transaction do
+            if version.save
+              if self.respond_to? :parent_node
+                generate_history_activity(self.parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', {})
+              elsif self.respond_to? :parent_nodes
+                self.parent_nodes.find_each do |parent_node|
+                  generate_history_activity(parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', {})
+                end
+              end
+            else
+              raise "Save history fails for destroying record #{self.inspect}"
+            end
+          end
           send(self.class.versions_association_name).send :load_target
         end
       end
