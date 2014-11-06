@@ -254,23 +254,24 @@ module PaperTrail
       end
 
       def record_create
-        if paper_trail_switched_on?
+        if paper_trail_switched_on?          
           data = {
             :event     => paper_trail_event || 'create',
             :whodunnit => PaperTrail.whodunnit,
             :h_created_at => Time.zone.now
           }
+          version_changes = changes_for_paper_trail.merge(custom_field_changes)
 
           if changed_notably? and self.class.paper_trail_version_class.column_names.include?('object_changes')
-            data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? changes_for_paper_trail :
-              PaperTrail.serializer.dump(changes_for_paper_trail)
+            data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
+              PaperTrail.serializer.dump(version_changes)
           end
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.created_at, 'create', changes_for_paper_trail)
+                generate_history_activity(self.send(:parent_node), self, self.created_at, 'create', version_changes)
               end
             else
               raise "Save history fails for creating record #{self.inspect}"
@@ -298,7 +299,9 @@ module PaperTrail
       end
 
       def record_update
-        if paper_trail_switched_on? && changed_notably?
+        changes_for_custom_fields = custom_field_changes
+
+        if paper_trail_switched_on? && (changed_notably? || changes_for_custom_fields.present?)
           object_attrs = object_attrs_for_paper_trail(item_before_change)
           data = {
             :event     => paper_trail_event || 'update',
@@ -307,25 +310,85 @@ module PaperTrail
             :h_created_at => Time.zone.now
           }
 
+          version_changes = changes_for_paper_trail.merge(changes_for_custom_fields)
+
           if self.class.paper_trail_version_class.column_names.include?('object_changes')
-            data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? changes_for_paper_trail :
-              PaperTrail.serializer.dump(changes_for_paper_trail)
+            data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
+              PaperTrail.serializer.dump(version_changes)
           end
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.updated_at, 'update', changes_for_paper_trail)
+                generate_history_activity(self.send(:parent_node), self, self.updated_at, 'update', version_changes)
               elsif self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).find_each do |parent_node|
-                  generate_history_activity(parent_node, self, self.updated_at, 'update', changes_for_paper_trail)
+                  generate_history_activity(parent_node, self, self.updated_at, 'update', version_changes)
                 end
               end
             else
               raise "Save history fails for updating record #{self.inspect}"
             end
           end
+        end
+      end
+
+      def custom_field_changes
+        changes_for_custom_fields = {}
+        if self.respond_to?(:custom_field_values) && self.custom_field_values.present?
+          self.custom_field_values.each do |custom_field|
+            if custom_field.new_record?
+              key = custom_field.class.custom_field_type_name(custom_field.value_type)
+              value = custom_field.changes[key] if custom_field.changes.has_key?(key)
+              if ['lookup', 'body_part'].include? custom_field.value_type
+                if value.last.reject(&:blank?) != value.first.reject(&:blank?)
+                  field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                  changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
+                end
+              else
+                if value.last != value.first
+                  field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                  changes_for_custom_fields[field_name] = value
+                end
+              end
+            else
+              if custom_field.changed?
+                field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, custom_field.changes.values.first)
+              end
+            end
+          end
+        end
+        changes_for_custom_fields
+      end
+
+      def humanize_custom_field_value custom_field, value
+        custom_definition = custom_field.custom_definition
+        if value.present?
+          if custom_field.value_type.eql?('lookup')
+            raw_before = value.first.reject(&:blank?)
+            raw_after = value.last.reject(&:blank?)
+            before = humanize_lookup_value(custom_definition, raw_before)
+            after = humanize_lookup_value(custom_definition, raw_after)
+            return [before, after]
+          elsif custom_field.value_type.eql?('body_part')
+            raw_before = value.first.reject(&:blank?)
+            raw_after = value.last.reject(&:blank?)
+            before = raw_before.present? ? custom_definition.compute_value(raw_before) : ''
+            after = raw_after.present? ? custom_definition.compute_value(raw_after) : ''
+            return [before, after]
+          else
+            return value
+          end
+        end
+      end
+
+      def humanize_lookup_value custom_definition, array_value
+        if array_value.any?
+          custom_definition.custom_definition_lookups.select{|cdl| [array_value].flatten.include?(cdl.id.to_s)}.map{|obj| strip_tags(obj.get_translated_value)}.join(", ")
+        else
+          ''
         end
       end
 
