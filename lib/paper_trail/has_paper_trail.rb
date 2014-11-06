@@ -341,7 +341,7 @@ module PaperTrail
             if custom_field.new_record?
               key = custom_field.class.custom_field_type_name(custom_field.value_type)
               value = custom_field.changes[key] if custom_field.changes.has_key?(key)
-              if ['lookup', 'body_part'].include? custom_field.value_type
+              if custom_field.value_type == 'lookup'
                 if value.last.reject(&:blank?) != value.first.reject(&:blank?)
                   field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
                   changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
@@ -349,7 +349,7 @@ module PaperTrail
               else
                 if value.last != value.first
                   field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
-                  changes_for_custom_fields[field_name] = value
+                  changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
                 end
               end
             else
@@ -373,10 +373,10 @@ module PaperTrail
             after = humanize_lookup_value(custom_definition, raw_after)
             return [before, after]
           elsif custom_field.value_type.eql?('body_part')
-            raw_before = value.first.reject(&:blank?)
-            raw_after = value.last.reject(&:blank?)
-            before = raw_before.present? ? custom_definition.compute_value(raw_before) : ''
-            after = raw_after.present? ? custom_definition.compute_value(raw_after) : ''
+            raw_before = value.first
+            raw_after = value.last
+            before = raw_before.present? ? custom_definition.compute_textual_value(raw_before) : ''
+            after = raw_after.present? ? custom_definition.compute_textual_value(raw_after) : ''
             return [before, after]
           else
             return value
@@ -386,7 +386,7 @@ module PaperTrail
 
       def humanize_lookup_value custom_definition, array_value
         if array_value.any?
-          custom_definition.custom_definition_lookups.select{|cdl| [array_value].flatten.include?(cdl.id.to_s)}.map{|obj| strip_tags(obj.get_translated_value)}.join(", ")
+          custom_definition.custom_definition_lookups.select{|cdl| [array_value].flatten.include?(cdl.id.to_s)}.map{|obj| ActionController::Base.helpers.strip_tags(obj.get_translated_value)}.join(", ")
         else
           ''
         end
