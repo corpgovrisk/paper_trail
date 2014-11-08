@@ -266,12 +266,15 @@ module PaperTrail
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
               PaperTrail.serializer.dump(version_changes)
           end
+
+          data[:readable_changes] = humanize_version_changes(version_changes)
+
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.created_at, 'create', version_changes)
+                generate_history_activity(self.send(:parent_node), self, self.created_at, 'create', data[:readable_changes])
               end
             else
               raise "Save history fails for creating record #{self.inspect}"
@@ -298,6 +301,35 @@ module PaperTrail
         notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
       end
 
+      def humanize_version_changes version_changes
+        changes = {}
+        version_changes.each do |key, value|
+          if value.present?
+            if key.match(/_id(s)?/)
+              before_ids = [value.first].flatten
+              after_ids = [value.last].flatten
+              assoc_name = key.match(/_id(s)?/).pre_match
+              assoc_klass = ((self.class.reflections[assoc_name.to_sym].options[:class_name] || self.class.reflections[assoc_name.to_sym].name.to_s) rescue nil)
+              assoc = assoc_klass.classify.constantize rescue nil
+              if assoc_klass.present? && assoc.present?
+                assocs = assoc.unscoped.where(id: [value.first, value.last].flatten.reject(&:blank?))
+                before = before_ids.present? ? assocs.select{|a| before_ids.include?(a.id)}.join(', ') : ''
+                after = after_ids.present? ? assocs.select{|a| after_ids.include?(a.id)}.join(', ') : ''
+                changes[key] = [before, after]
+              else
+                changes[key] = value
+              end
+            else
+              changes[key] = value
+            end
+          else
+            changes[key] = value
+          end
+        end
+
+        changes
+      end
+
       def record_update
         changes_for_custom_fields = custom_field_changes
 
@@ -316,15 +348,18 @@ module PaperTrail
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
               PaperTrail.serializer.dump(version_changes)
           end
+
+          data[:readable_changes] = humanize_version_changes(version_changes)
+
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.updated_at, 'update', version_changes)
+                generate_history_activity(self.send(:parent_node), self, self.updated_at, 'update', data[:readable_changes])
               elsif self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).find_each do |parent_node|
-                  generate_history_activity(parent_node, self, self.updated_at, 'update', version_changes)
+                  generate_history_activity(parent_node, self, self.updated_at, 'update', data[:readable_changes])
                 end
               end
             else
@@ -371,6 +406,12 @@ module PaperTrail
             raw_after = value.last.reject(&:blank?)
             before = humanize_lookup_value(custom_definition, raw_before)
             after = humanize_lookup_value(custom_definition, raw_after)
+            return [before, after]
+          elsif custom_field.value_type.eql?('boolean')
+            raw_before = value.first
+            raw_after = value.last
+            before = raw_before.present? ? (raw_before.eql?('true') ? custom_definition.translated_true : custom_definition.translated_false) : ''
+            after = raw_after.present? ? (raw_after.eql?('true') ? custom_definition.translated_true : custom_definition.translated_false) : ''
             return [before, after]
           elsif custom_field.value_type.eql?('body_part')
             raw_before = value.first
