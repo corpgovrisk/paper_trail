@@ -347,7 +347,7 @@ module PaperTrail
                   changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
                 end
               else
-                if value.last != value.first
+                if value.present? && (value.last != value.first)
                   field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
                   changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
                 end
