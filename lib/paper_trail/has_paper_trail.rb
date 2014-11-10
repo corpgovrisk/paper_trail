@@ -378,18 +378,18 @@ module PaperTrail
               value = custom_field.changes[key] if custom_field.changes.has_key?(key)
               if custom_field.value_type == 'lookup'
                 if value.last.reject(&:blank?) != value.first.reject(&:blank?)
-                  field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                  field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
                   changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
                 end
               else
                 if value.present? && (value.last != value.first)
-                  field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                  field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
                   changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
                 end
               end
             else
               if custom_field.changed?
-                field_name = custom_field.custom_definition.translated_label(true).gsub(/\s/,'').underscore
+                field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
                 changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, custom_field.changes.values.first)
               end
             end
