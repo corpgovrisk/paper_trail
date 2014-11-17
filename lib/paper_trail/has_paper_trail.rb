@@ -77,7 +77,7 @@ module PaperTrail
           before_update :record_update, :if => :save_version?
           after_update  :clear_version_instance!
         end
-        after_destroy :record_destroy, :if => :save_version? if options_on.empty? || options_on.include?(:destroy)
+        before_destroy :record_destroy, :if => :save_version? if options_on.empty? || options_on.include?(:destroy)
       end
 
       # Switches PaperTrail off for this class.
