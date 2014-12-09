@@ -388,9 +388,10 @@ module PaperTrail
                 end
               end
             else
-              if custom_field.changed?
+              changes = changes_for_custom_field_values(custom_field.changes)
+              if changes.present?
                 field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
-                changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, custom_field.changes.values.first)
+                changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, changes.values.first)
               end
             end
           end
@@ -402,8 +403,8 @@ module PaperTrail
         custom_definition = custom_field.custom_definition
         if value.present?
           if custom_field.value_type.eql?('lookup')
-            raw_before = value.first.reject(&:blank?)
-            raw_after = value.last.reject(&:blank?)
+            raw_before = [value.first].flatten.reject(&:blank?)
+            raw_after = [value.last].flatten.reject(&:blank?)
             before = humanize_lookup_value(custom_definition, raw_before)
             after = humanize_lookup_value(custom_definition, raw_after)
             return [before, after]
@@ -430,6 +431,12 @@ module PaperTrail
           custom_definition.custom_definition_lookups.select{|cdl| [array_value].flatten.include?(cdl.id.to_s)}.map{|obj| ActionController::Base.helpers.strip_tags(obj.get_translated_value)}.join(", ")
         else
           ''
+        end
+      end
+
+      def changes_for_custom_field_values changes
+        changes.delete_if do |key, value|
+          CustomDefinitionValue.paper_trail_options[:skip].include?(key)
         end
       end
 
