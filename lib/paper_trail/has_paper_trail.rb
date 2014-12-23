@@ -375,16 +375,18 @@ module PaperTrail
           self.custom_field_values.each do |custom_field|
             if custom_field.new_record?
               key = custom_field.class.custom_field_type_name(custom_field.value_type)
-              value = custom_field.changes[key] if custom_field.changes.has_key?(key)
-              if custom_field.value_type == 'lookup'
-                if value.last.reject(&:blank?) != value.first.reject(&:blank?)
-                  field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
-                  changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
-                end
-              else
-                if value.present? && (value.last != value.first)
-                  field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
-                  changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
+              value = custom_field.changes.has_key?(key) ? custom_field.changes[key] : nil
+              if value.present?
+                if custom_field.value_type == 'lookup'
+                  if value.last.reject(&:blank?) != value.first.reject(&:blank?)
+                    field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
+                    changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
+                  end
+                else
+                  if value.last != value.first
+                    field_name = custom_field.custom_definition.translated_label(true).titleize.gsub(/\s/,'').underscore
+                    changes_for_custom_fields[field_name] = humanize_custom_field_value(custom_field, value)
+                  end
                 end
               end
             else
