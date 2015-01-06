@@ -273,8 +273,10 @@ module PaperTrail
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
-              if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.created_at, 'create', data[:readable_changes])
+              if self.respond_to?(:parent_nodes, true)
+                self.send(:parent_nodes).each do |parent_node|
+                  generate_history_activity(parent_node, self, self.created_at, 'create', data[:readable_changes])
+                end
               end
             else
               raise "Save history fails for creating record #{self.inspect}"
@@ -355,10 +357,8 @@ module PaperTrail
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
-              if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, self.updated_at, 'update', data[:readable_changes])
-              elsif self.respond_to?(:parent_nodes, true)
-                self.send(:parent_nodes).find_each do |parent_node|
+              if self.respond_to?(:parent_nodes, true)
+                self.send(:parent_nodes).each do |parent_node|
                   generate_history_activity(parent_node, self, self.updated_at, 'update', data[:readable_changes])
                 end
               end
@@ -473,10 +473,8 @@ module PaperTrail
           version.assign_attributes(object_attrs)
           ActiveRecord::Base.transaction do
             if version.save
-              if self.respond_to?(:parent_node, true)
-                generate_history_activity(self.send(:parent_node), self, (self.try(:deleted_at) || self.updated_at), 'destroy', {})
-              elsif self.respond_to?(:parent_nodes, true)
-                self.send(:parent_nodes).find_each do |parent_node|
+              if self.respond_to?(:parent_nodes, true)
+                self.send(:parent_nodes).each do |parent_node|
                   generate_history_activity(parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', {})
                 end
               end
