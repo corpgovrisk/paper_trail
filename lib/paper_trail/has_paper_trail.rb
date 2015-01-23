@@ -471,11 +471,14 @@ module PaperTrail
           }
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(object_attrs)
+
+          readable_changes = humanize_version_changes(object_attrs_for_destroy(object_attrs).merge(custom_field_changes))
+
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).each do |parent_node|
-                  generate_history_activity(parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', {})
+                  generate_history_activity(parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', readable_changes)
                 end
               end
             else
@@ -484,6 +487,12 @@ module PaperTrail
           end
           send(self.class.versions_association_name).send :load_target
         end
+      end
+
+      def object_attrs_for_destroy object_attrs
+        attrs = {}
+        object_attrs.each{|key, value| attrs[key] = [value, nil] }
+        attrs
       end
 
       def merge_metadata(data)
