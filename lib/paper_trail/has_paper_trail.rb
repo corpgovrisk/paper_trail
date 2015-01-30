@@ -413,8 +413,8 @@ module PaperTrail
           elsif custom_field.value_type.eql?('boolean')
             raw_before = value.first
             raw_after = value.last
-            before = raw_before.present? ? (raw_before.eql?('true') ? custom_definition.translated_true : custom_definition.translated_false) : ''
-            after = raw_after.present? ? (raw_after.eql?('true') ? custom_definition.translated_true : custom_definition.translated_false) : ''
+            before = raw_before.present? ? ((raw_before.eql?('true') || raw_before.eql?('1')) ? custom_definition.translated_true : custom_definition.translated_false) : ''
+            after = raw_after.present? ? ((raw_after.eql?('true') || raw_after.eql?('1')) ? custom_definition.translated_true : custom_definition.translated_false) : ''
             return [before, after]
           elsif custom_field.value_type.eql?('body_part')
             raw_before = value.first
