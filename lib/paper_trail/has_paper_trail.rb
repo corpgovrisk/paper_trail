@@ -254,7 +254,7 @@ module PaperTrail
       end
 
       def record_create
-        if paper_trail_switched_on?          
+        if paper_trail_switched_on?
           data = {
             :event     => paper_trail_event || 'create',
             :whodunnit => PaperTrail.whodunnit,
@@ -295,11 +295,11 @@ module PaperTrail
           :source_changes => source_changes
         }
 
-        if (source.class == RiskRating) && notified_target.class.name.eql?('Risk')
+        if source.class.name.eql?('RiskRating') && notified_target.class.name.eql?('Risk')
           activity[:risk_rating] = source.risk_rating
           activity[:rating_type] = source.rating_type
         end
-        
+
         notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
       end
 
