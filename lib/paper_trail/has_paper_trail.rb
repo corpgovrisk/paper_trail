@@ -295,11 +295,6 @@ module PaperTrail
           :source_changes => source_changes
         }
 
-        if source.class.name.eql?('RiskRating') && notified_target.class.name.eql?('Risk')
-          activity[:risk_rating] = source.risk_rating
-          activity[:rating_type] = source.rating_type
-        end
-
         notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
       end
 
