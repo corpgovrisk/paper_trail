@@ -266,10 +266,8 @@ module PaperTrail
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
               PaperTrail.serializer.dump(version_changes)
           end
-
           data[:readable_changes] = humanize_version_changes(version_changes)
-
-          version = send(self.class.versions_association_name).new merge_metadata(data)
+          version = send(self.class.versions_association_name).new data
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
@@ -323,7 +321,7 @@ module PaperTrail
             changes[key] = value
           end
         end
-
+        merge_metadata(changes)
         changes
       end
 
@@ -345,10 +343,9 @@ module PaperTrail
             data[:object_changes] = self.class.paper_trail_version_class.object_changes_col_is_json? ? version_changes :
               PaperTrail.serializer.dump(version_changes)
           end
-
           data[:readable_changes] = humanize_version_changes(version_changes)
 
-          version = send(self.class.versions_association_name).new merge_metadata(data)
+          version = send(self.class.versions_association_name).new data
           version.assign_attributes(self.attributes)
           ActiveRecord::Base.transaction do
             if version.save
