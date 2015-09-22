@@ -293,9 +293,17 @@ module PaperTrail
           :modified_by_id => PaperTrail.whodunnit,
           :event => event,
           :source_changes => source_changes
-        }
+        }.merge(rating_metadata(notified_target))
 
         notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
+      end
+
+      def rating_metadata notified_target
+        if notified_target.class.eql?(Risk)
+          return {:risk_rating_residual => notified_target.risk_rating_residual}
+        else
+          return {}
+        end
       end
 
       def humanize_version_changes version_changes
