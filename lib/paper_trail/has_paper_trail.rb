@@ -464,6 +464,7 @@ module PaperTrail
       def record_destroy
         if paper_trail_switched_on? and not new_record?
           object_attrs = object_attrs_for_paper_trail(item_before_change)
+
           data = {
             :item_id   => self.id,
             :item_type => self.class.base_class.name,
@@ -472,10 +473,15 @@ module PaperTrail
             :whodunnit => PaperTrail.whodunnit,
             :h_created_at => Time.zone.now
           }
+          
+          object_changes = object_attrs_for_destroy(object_attrs).merge(custom_field_changes)
+          readable_changes = humanize_version_changes(object_changes)
+
+          data[:object_changes] = object_changes
+          data[:readable_changes] = readable_changes
+
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(object_attrs)
-
-          readable_changes = humanize_version_changes(object_attrs_for_destroy(object_attrs).merge(custom_field_changes))
 
           ActiveRecord::Base.transaction do
             if version.save
