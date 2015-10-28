@@ -260,6 +260,11 @@ module PaperTrail
             :whodunnit => PaperTrail.whodunnit,
             :h_created_at => Time.zone.now
           }
+
+          # Add history stuff
+          data = history_meta(data)
+
+          # Add custom field stuff
           version_changes = changes_for_paper_trail.merge(custom_field_changes)
 
           if changed_notably? and self.class.paper_trail_version_class.column_names.include?('object_changes')
@@ -267,10 +272,12 @@ module PaperTrail
               PaperTrail.serializer.dump(version_changes)
           end
 
+          # Humanize changes 
           data[:readable_changes] = humanize_version_changes(version_changes)
 
           version = send(self.class.versions_association_name).new merge_metadata(data)
           version.assign_attributes(self.attributes)
+
           ActiveRecord::Base.transaction do
             if version.save
               if self.respond_to?(:parent_nodes, true)
@@ -292,7 +299,8 @@ module PaperTrail
           :source_occurred_at => occurred_at,
           :modified_by_id => PaperTrail.whodunnit,
           :event => event,
-          :source_changes => source_changes
+          :source_changes => source_changes,
+          :internal => is_internal_change(source_changes)
         }.merge(rating_metadata(notified_target))
 
         notified_target.history_activities.create(activity) if notified_target.respond_to? :history_activities
@@ -300,10 +308,34 @@ module PaperTrail
 
       def rating_metadata notified_target
         if notified_target.class.eql?(Risk)
-          return {:risk_rating_residual => notified_target.risk_rating_residual}
+          return {
+            :risk_rating_residual => notified_target.risk_rating_residual,
+            :risk_rating_inherent => notified_target.risk_rating_inherent,
+            :risk_rating_alarp => notified_target.risk_rating_alarp
+          }
         else
           return {}
         end
+      end
+
+      def is_internal_change(sc)
+        sc.present? && (sc.size == 1) && (internal_changes & sc.keys).any?
+      end
+
+      def internal_changes
+        ['risk_rating_inherent', 'risk_rating_residual', 'risk_rating_alarp']
+      end
+
+      def history_meta(data)
+        if self.class.eql?(Risk)
+          loaded_risk = Risk.list_pivot(self.id).find_by_id(self.id)
+
+          data[:history_residual_risk_rating] = loaded_risk.residual_risk_rating
+          data[:history_inherent_risk_rating] = loaded_risk.inherent_risk_rating
+          data[:history_alarp_risk_rating] = loaded_risk.alarp_risk_rating
+        end
+
+        data
       end
 
       def humanize_version_changes version_changes
@@ -347,6 +379,10 @@ module PaperTrail
             :h_created_at => Time.zone.now
           }
 
+          # Add history stuff
+          data = history_meta(data)
+
+          # Add custom field stuff
           version_changes = changes_for_paper_trail.merge(changes_for_custom_fields)
 
           if self.class.paper_trail_version_class.column_names.include?('object_changes')
@@ -473,7 +509,11 @@ module PaperTrail
             :whodunnit => PaperTrail.whodunnit,
             :h_created_at => Time.zone.now
           }
+
+          # Add history stuff
+          data = history_meta(data)
           
+          # Add custom field stuff
           object_changes = object_attrs_for_destroy(object_attrs).merge(custom_field_changes)
           readable_changes = humanize_version_changes(object_changes)
 
