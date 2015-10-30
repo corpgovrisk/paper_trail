@@ -282,7 +282,7 @@ module PaperTrail
             if version.save
               if self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).each do |parent_node|
-                  generate_history_activity(parent_node, self, self.created_at, 'create', data[:readable_changes])
+                  generate_history_activity(version, parent_node, self, self.created_at, 'create', data[:readable_changes])
                 end
               end
             else
@@ -292,10 +292,12 @@ module PaperTrail
         end
       end
 
-      def generate_history_activity notified_target, source, occurred_at, event, source_changes
+      def generate_history_activity version, notified_target, source, occurred_at, event, source_changes
         activity = {
           :source_id => source.id,
           :source_type => source.class.to_s,
+          :history_source_id => version.id,
+          :history_source_type => version.class.name,
           :source_occurred_at => occurred_at,
           :modified_by_id => PaperTrail.whodunnit,
           :event => event,
@@ -398,7 +400,7 @@ module PaperTrail
             if version.save
               if self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).each do |parent_node|
-                  generate_history_activity(parent_node, self, self.updated_at, 'update', data[:readable_changes])
+                  generate_history_activity(version, parent_node, self, self.updated_at, 'update', data[:readable_changes])
                 end
               end
             else
@@ -527,7 +529,7 @@ module PaperTrail
             if version.save
               if self.respond_to?(:parent_nodes, true)
                 self.send(:parent_nodes).each do |parent_node|
-                  generate_history_activity(parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', readable_changes)
+                  generate_history_activity(version, parent_node, self, (self.try(:deleted_at) || self.updated_at), 'destroy', readable_changes)
                 end
               end
             else
