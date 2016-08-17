@@ -348,7 +348,8 @@ module PaperTrail
               before_ids = [value.first].flatten
               after_ids = [value.last].flatten
               assoc_name = key.match(/_id(s)?/).pre_match
-              assoc_klass = ((self.class.reflections[assoc_name.to_sym].options[:class_name] || self.class.reflections[assoc_name.to_sym].name.to_s) rescue nil)
+              reflection = self.class.reflections[assoc_name]
+              assoc_klass = ((reflection.options[:class_name] || reflection.name.to_s) rescue nil)
               assoc = assoc_klass.classify.constantize rescue nil
               if assoc_klass.present? && assoc.present?
                 assocs = assoc.unscoped.where(id: [value.first, value.last].flatten.reject(&:blank?))
